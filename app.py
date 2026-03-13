@@ -285,13 +285,17 @@ with st.sidebar:
             })
             data = {
                 "coin": coin, "position": position,
-                "note": note, "email": email.strip(),
+                "note": note,
                 "entry_price": entry_price,
                 "current_price": entry_price, "usdt_amount": float(usdt_amt),
                 "leverage": int(leverage), "profit_percent": 0.0,
                 "open_time": now, "close_days": int(close_days),
                 "is_closed": False, "updated_at": now
             }
+            # Chỉ cập nhật email nếu người dùng thực sự nhập email mới
+            if email.strip():
+                data["email"] = email.strip()
+
             if existing:
                 collection.update_one({"_id": existing["_id"]}, {"$set": data})
                 st.success(f"✅ Đã cập nhật {position} {coin} - Profile {profile}")
