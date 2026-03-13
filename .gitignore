@@ -1,0 +1,9 @@
+.streamlit/secrets.toml
+secrets.toml
+__pycache__/
+*.pyc
+.env
+venv/
+.venv/
+requirements (1).txt
+skills/
