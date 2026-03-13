@@ -65,8 +65,22 @@ COIN_LIST = [
     "SHIB","TON","NEAR","DYDX","XLM","DOGE"
 ]
 
+# ─── Map tên coin cho CoinGecko ────────────────────────────────────────────────
+COINGECKO_IDS = {
+    "BTC": "bitcoin", "ETH": "ethereum", "BNB": "binancecoin", "SOL": "solana",
+    "ADA": "cardano", "XRP": "ripple", "DOT": "polkadot", "DOGE": "dogecoin",
+    "AVAX": "avalanche-2", "ATOM": "cosmos", "TRX": "tron", "NEO": "neo",
+    "AAVE": "aave", "NOT": "notcoin", "ONE": "harmony", "BCH": "bitcoin-cash",
+    "LTC": "litecoin", "CRV": "curve-dao-token", "ICP": "internet-computer",
+    "FIL": "filecoin", "PEPE": "pepe", "ETC": "ethereum-classic", "SUI": "sui",
+    "ALGO": "algorand", "POL": "matic-network", "SHIB": "shiba-inu",
+    "TON": "the-open-network", "NEAR": "near", "DYDX": "dydx-chain",
+    "XLM": "stellar",
+}
+
 # ─── Hàm tiện ích ─────────────────────────────────────────────────────────────
-def get_coin_price(coin: str):
+def _try_binance(coin: str):
+    """Thử lấy giá từ Binance Global."""
     try:
         r = requests.get(
             f"https://api.binance.com/api/v3/ticker/price?symbol={coin}USDT",
@@ -76,6 +90,45 @@ def get_coin_price(coin: str):
             return float(r.json()["price"])
     except Exception:
         pass
+    return None
+
+def _try_binance_us(coin: str):
+    """Thử lấy giá từ Binance US (ít bị chặn hơn trên cloud)."""
+    try:
+        r = requests.get(
+            f"https://api.binance.us/api/v3/ticker/price?symbol={coin}USDT",
+            timeout=5
+        )
+        if r.status_code == 200:
+            return float(r.json()["price"])
+    except Exception:
+        pass
+    return None
+
+def _try_coingecko(coin: str):
+    """Fallback: lấy giá từ CoinGecko (miễn phí, không cần API key)."""
+    cg_id = COINGECKO_IDS.get(coin)
+    if not cg_id:
+        return None
+    try:
+        r = requests.get(
+            f"https://api.coingecko.com/api/v3/simple/price?ids={cg_id}&vs_currencies=usd",
+            timeout=10
+        )
+        if r.status_code == 200:
+            data = r.json()
+            if cg_id in data and "usd" in data[cg_id]:
+                return float(data[cg_id]["usd"])
+    except Exception:
+        pass
+    return None
+
+def get_coin_price(coin: str):
+    """Lấy giá coin, thử lần lượt Binance → Binance US → CoinGecko."""
+    for fetcher in (_try_binance, _try_binance_us, _try_coingecko):
+        price = fetcher(coin)
+        if price:
+            return price
     return None
 
 def calc_profit_pct(entry, current, position, leverage):
