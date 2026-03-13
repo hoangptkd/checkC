@@ -4,6 +4,8 @@ import requests
 from datetime import datetime, timedelta
 from bson.objectid import ObjectId
 import pandas as pd
+from urllib.parse import quote_plus, urlparse, urlunparse, parse_qs, urlencode
+
 # ─── Cấu hình trang ───────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Coin Trading Tracker",
@@ -30,9 +32,24 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ─── Kết nối MongoDB ──────────────────────────────────────────────────────────
+def _encode_mongo_uri(uri: str) -> str:
+    """Encode username/password theo RFC 3986 để pymongo mới không lỗi."""
+    parsed = urlparse(uri)
+    if parsed.username and parsed.password:
+        user = quote_plus(parsed.username)
+        pwd = quote_plus(parsed.password)
+        # Rebuild netloc with encoded credentials
+        host = parsed.hostname
+        if parsed.port:
+            host = f"{host}:{parsed.port}"
+        netloc = f"{user}:{pwd}@{host}"
+        uri = urlunparse(parsed._replace(netloc=netloc))
+    return uri
+
 @st.cache_resource
 def get_db():
     uri = st.secrets["MONGO_URI"]
+    uri = _encode_mongo_uri(uri)
     client = MongoClient(uri, tlsAllowInvalidCertificates=True)
     db = client["coin_tracker"]
     return db
