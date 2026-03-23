@@ -80,7 +80,8 @@ COINGECKO_IDS = {
 
 # ─── Hàm tiện ích ─────────────────────────────────────────────────────────────
 def _try_toobit(coin: str):
-    """Ưu tiên lấy giá từ Toobit (sàn giao dịch chính)."""
+    """Ưu tiên lấy giá từ Toobit (sàn giao dịch chính).
+    API trả về: [{"s":"FILUSDT","p":"0.866"}]"""
     try:
         r = requests.get(
             f"https://api.toobit.com/quote/v1/ticker/price?symbol={coin}USDT",
@@ -88,10 +89,10 @@ def _try_toobit(coin: str):
         )
         if r.status_code == 200:
             data = r.json()
-            if isinstance(data, dict) and "price" in data:
-                return float(data["price"])
-            if isinstance(data, list) and len(data) > 0 and "price" in data[0]:
-                return float(data[0]["price"])
+            if isinstance(data, list) and len(data) > 0 and "p" in data[0]:
+                return float(data[0]["p"])
+            if isinstance(data, dict) and "p" in data:
+                return float(data["p"])
     except Exception:
         pass
     return None
