@@ -109,19 +109,6 @@ def _try_binance(coin: str):
         pass
     return None
 
-def _try_binance_us(coin: str):
-    """Fallback: lấy giá từ Binance US."""
-    try:
-        r = requests.get(
-            f"https://api.binance.us/api/v3/ticker/price?symbol={coin}USDT",
-            timeout=5
-        )
-        if r.status_code == 200:
-            return float(r.json()["price"])
-    except Exception:
-        pass
-    return None
-
 def _try_coingecko(coin: str):
     """Fallback cuối: lấy giá từ CoinGecko."""
     cg_id = COINGECKO_IDS.get(coin)
@@ -144,14 +131,13 @@ def _try_coingecko(coin: str):
 _SOURCE_NAMES = {
     _try_toobit:    "Toobit",
     _try_binance:   "Binance",
-    _try_binance_us:"Binance US",
     _try_coingecko: "CoinGecko",
 }
 
 def get_coin_price(coin: str):
-    """Lấy giá coin, thử lần lượt Toobit → Binance → Binance US → CoinGecko.
+    """Lấy giá coin, thử lần lượt Toobit → Binance → CoinGecko.
     Trả về (price, source) hoặc (None, None)."""
-    for fetcher in (_try_toobit, _try_binance, _try_binance_us, _try_coingecko):
+    for fetcher in (_try_toobit, _try_binance, _try_coingecko):
         price = fetcher(coin)
         if price:
             return price, _SOURCE_NAMES[fetcher]
