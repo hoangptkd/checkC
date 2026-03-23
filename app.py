@@ -231,6 +231,14 @@ def auto_close_overdue():
         closed += 1
     return closed
 
+# ─── Tự động cập nhật giá & quét chốt mỗi khi trang load (30 phút / lần) ─────
+with st.spinner("🔄 Đang tự động cập nhật giá & quét chốt..."):
+    _auto_updated = update_all_prices()
+    _auto_closed  = auto_close_overdue()
+
+_now_str = datetime.now().strftime("%H:%M:%S %d/%m/%Y")
+st.toast(f"✅ Auto-update: {_auto_updated} coin cập nhật, {_auto_closed} giao dịch chốt ({_now_str})")
+
 # ─── Sidebar: Thêm giao dịch ──────────────────────────────────────────────────
 with st.sidebar:
     st.header("➕ Thêm Giao Dịch")
