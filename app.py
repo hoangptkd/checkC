@@ -79,8 +79,25 @@ COINGECKO_IDS = {
 }
 
 # ─── Hàm tiện ích ─────────────────────────────────────────────────────────────
+def _try_toobit(coin: str):
+    """Ưu tiên lấy giá từ Toobit (sàn giao dịch chính)."""
+    try:
+        r = requests.get(
+            f"https://api.toobit.com/quote/v1/ticker/price?symbol={coin}USDT",
+            timeout=5
+        )
+        if r.status_code == 200:
+            data = r.json()
+            if isinstance(data, dict) and "price" in data:
+                return float(data["price"])
+            if isinstance(data, list) and len(data) > 0 and "price" in data[0]:
+                return float(data[0]["price"])
+    except Exception:
+        pass
+    return None
+
 def _try_binance(coin: str):
-    """Thử lấy giá từ Binance Global."""
+    """Fallback: lấy giá từ Binance Global."""
     try:
         r = requests.get(
             f"https://api.binance.com/api/v3/ticker/price?symbol={coin}USDT",
@@ -93,7 +110,7 @@ def _try_binance(coin: str):
     return None
 
 def _try_binance_us(coin: str):
-    """Thử lấy giá từ Binance US (ít bị chặn hơn trên cloud)."""
+    """Fallback: lấy giá từ Binance US."""
     try:
         r = requests.get(
             f"https://api.binance.us/api/v3/ticker/price?symbol={coin}USDT",
@@ -106,7 +123,7 @@ def _try_binance_us(coin: str):
     return None
 
 def _try_coingecko(coin: str):
-    """Fallback: lấy giá từ CoinGecko (miễn phí, không cần API key)."""
+    """Fallback cuối: lấy giá từ CoinGecko."""
     cg_id = COINGECKO_IDS.get(coin)
     if not cg_id:
         return None
@@ -124,8 +141,8 @@ def _try_coingecko(coin: str):
     return None
 
 def get_coin_price(coin: str):
-    """Lấy giá coin, thử lần lượt Binance → Binance US → CoinGecko."""
-    for fetcher in (_try_binance, _try_binance_us, _try_coingecko):
+    """Lấy giá coin, thử lần lượt Toobit → Binance → Binance US → CoinGecko."""
+    for fetcher in (_try_toobit, _try_binance, _try_binance_us, _try_coingecko):
         price = fetcher(coin)
         if price:
             return price
