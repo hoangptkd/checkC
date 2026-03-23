@@ -140,13 +140,22 @@ def _try_coingecko(coin: str):
         pass
     return None
 
+# Map tên nguồn giá
+_SOURCE_NAMES = {
+    _try_toobit:    "Toobit",
+    _try_binance:   "Binance",
+    _try_binance_us:"Binance US",
+    _try_coingecko: "CoinGecko",
+}
+
 def get_coin_price(coin: str):
-    """Lấy giá coin, thử lần lượt Toobit → Binance → Binance US → CoinGecko."""
+    """Lấy giá coin, thử lần lượt Toobit → Binance → Binance US → CoinGecko.
+    Trả về (price, source) hoặc (None, None)."""
     for fetcher in (_try_toobit, _try_binance, _try_binance_us, _try_coingecko):
         price = fetcher(coin)
         if price:
-            return price
-    return None
+            return price, _SOURCE_NAMES[fetcher]
+    return None, None
 
 def calc_profit_pct(entry, current, position, leverage):
     if position == "LONG":
@@ -205,17 +214,20 @@ def update_all_prices():
         "is_closed": {"$ne": True}
     }))
     updated = 0
+    source_counts = {}  # Đếm số coin lấy từ mỗi nguồn
     for t in trades:
-        price = get_coin_price(t["coin"])
+        price, source = get_coin_price(t["coin"])
         if price:
             pct = calc_profit_pct(t["entry_price"], price, t["position"], t.get("leverage", 10))
             collection.update_one({"_id": t["_id"]}, {"$set": {
                 "current_price": price,
                 "profit_percent": pct,
+                "price_source": source,
                 "updated_at": datetime.now()
             }})
             updated += 1
-    return updated
+            source_counts[source] = source_counts.get(source, 0) + 1
+    return updated, source_counts
 
 def auto_close_overdue():
     trades = list(collection.find({
@@ -231,7 +243,7 @@ def auto_close_overdue():
             continue
         if now - open_time < timedelta(days=close_days):
             continue
-        price = get_coin_price(t["coin"])
+        price, _ = get_coin_price(t["coin"])
         if not price:
             price = t.get("current_price", t["entry_price"])
         pct   = calc_profit_pct(t["entry_price"], price, t["position"], t.get("leverage", 10))
@@ -250,11 +262,12 @@ def auto_close_overdue():
 
 # ─── Tự động cập nhật giá & quét chốt mỗi khi trang load (30 phút / lần) ─────
 with st.spinner("🔄 Đang tự động cập nhật giá & quét chốt..."):
-    _auto_updated = update_all_prices()
+    _auto_updated, _source_counts = update_all_prices()
     _auto_closed  = auto_close_overdue()
 
 _now_str = datetime.now().strftime("%H:%M:%S %d/%m/%Y")
-st.toast(f"✅ Auto-update: {_auto_updated} coin cập nhật, {_auto_closed} giao dịch chốt ({_now_str})")
+_source_info = ", ".join([f"{src}: {cnt}" for src, cnt in _source_counts.items()]) if _source_counts else "Không có"
+st.toast(f"✅ Auto-update: {_auto_updated} coin cập nhật ({_source_info}), {_auto_closed} giao dịch chốt ({_now_str})")
 
 # ─── Sidebar: Thêm giao dịch ──────────────────────────────────────────────────
 with st.sidebar:
@@ -298,10 +311,12 @@ with st.sidebar:
                     st.stop()
             else:
                 with st.spinner(f"Đang lấy giá {coin}..."):
-                    entry_price = get_coin_price(coin)
+                    entry_price, _entry_src = get_coin_price(coin)
                 if not entry_price:
                     st.error(f"Không lấy được giá {coin}!")
                     st.stop()
+                else:
+                    st.info(f"📡 Giá lấy từ: {_entry_src}")
 
             now = datetime.now()
             existing = collection.find_one({
@@ -339,8 +354,9 @@ with st.sidebar:
 
     if st.button("🔄 Cập nhật tất cả giá"):
         with st.spinner("Đang cập nhật..."):
-            n = update_all_prices()
-        st.success(f"Đã cập nhật {n} coin")
+            n, src_counts = update_all_prices()
+        src_detail = ", ".join([f"{s}: {c}" for s, c in src_counts.items()]) if src_counts else "Không có"
+        st.success(f"Đã cập nhật {n} coin ({src_detail})")
         st.rerun()
 
     if st.button("⏰ Quét chốt tự động"):
@@ -447,19 +463,23 @@ else:
                 idx    = open_labels.index(sel_close)
                 tid    = ObjectId(open_ids[idx])
                 trade  = collection.find_one({"_id": tid})
-                price  = get_coin_price(trade["coin"]) or trade["current_price"]
+                price, _src  = get_coin_price(trade["coin"])
+                if not price:
+                    price = trade["current_price"]
+                    _src  = "Cache"
                 pct    = calc_profit_pct(trade["entry_price"], price, trade["position"], trade.get("leverage",10))
                 pusdt  = calc_profit_usdt(pct, trade.get("usdt_amount",50))
                 txt    = f"lời ${pusdt:.2f}" if pusdt >= 0 else f"lỗ ${abs(pusdt):.2f}"
                 collection.update_one({"_id": tid}, {"$set": {
                     "current_price":  price,
                     "profit_percent": pct,
-                    "note":           f"🔒 Đã chốt: {txt} ({pct:+.2f}%)",
+                    "price_source":   _src,
+                    "note":           f"🔒 Đã chốt: {txt} ({pct:+.2f}%) [Giá từ {_src}]",
                     "is_closed":      True,
                     "closed_at":      datetime.now(),
                     "updated_at":     datetime.now()
                 }})
-                st.success(f"Đã chốt! {txt}")
+                st.success(f"Đã chốt! {txt} (Giá từ {_src})")
                 st.rerun()
         else:
             st.info("Không có giao dịch đang mở.")
